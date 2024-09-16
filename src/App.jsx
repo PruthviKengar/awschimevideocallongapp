@@ -1,35 +1,51 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import  { useRef, useState } from 'react';
+import './App.css';
+import axios from 'axios'
+
+import * as Chime from 'amazon-chime-sdk-js';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [meetingResponse, setMeetingResponse] = useState()
+  const [attendeeResponse, setAttendeeResponse] = useState()
+  const [callCreated, setCallCreated] = useState(false)
+  const videoElement = useRef()
+  const startCall = async () => { 
+    const response = await axios.get('http://localhost:5000/meeting')
+    setMeetingResponse(response.data.meetingResponse)
+    setAttendeeResponse(response.data.attendee)
+    setCallCreated(true)
+  }
+
+  const joinVideoCall = async () => { 
+    const logger = new Chime.ConsoleLogger('ChimeMeetingLogs', Chime.LogLevel.INFO);
+    const deviceController = new Chime.DefaultDeviceController(logger);
+    const configuration = new Chime.MeetingSessionConfiguration(meetingResponse, attendeeResponse);
+    const meetingSession = new Chime.DefaultMeetingSession(configuration, logger, deviceController);
+
+    const observer = {
+      audioVideoDidStart: () => {
+        meetingSession.audioVideo.startLocalVideoTile();
+      },
+      videoTileDidUpdate: tileState => {
+        meetingSession.audioVideo.bindVideoElement(tileState.tileId, videoElement.current);
+      }
+    }
+
+    meetingSession.audioVideo.addObserver(observer);
+    const firstVideoDeviceId = (await meetingSession.audioVideo.listVideoInputDevices())[0].deviceId;
+    await meetingSession.audioVideo.chooseVideoInputDevice(firstVideoDeviceId);
+    meetingSession.audioVideo.start();
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div className="App">
+      <header className="App-header">
+        <video ref={videoElement}></video>
+        <button disabled={!callCreated} onClick={joinVideoCall}> join call</button>
+        <button onClick={startCall}>start call</button>
+      </header>
+    </div>
+  );
 }
 
-export default App
+export default App;
